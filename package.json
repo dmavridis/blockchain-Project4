@@ -1,0 +1,16 @@
+{
+  "name": "restful",
+  "version": "1.0.0",
+  "description": "Udacity project: RESTful web API with Node.js Framework",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "restful",
+    "node",
+    "blockchain"
+  ],
+  "author": "Dimitrios Mavridis",
+  "license": "ISC"
+}
