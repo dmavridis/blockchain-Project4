@@ -8,23 +8,53 @@ var Blockchain = require('./simpleChain.js')
 app.use(express.json())
 const PORT  = 8000;
 
-let blockchain = new Blockchain();
+let blockchain = new Blockchain.Blockchain();
 
-app.get('/', (req, res) => res.send('Welcome to my blockchain!'))
+app.get('/', (req, res) => res.send('Welcome Notary Blockhain service!'))
 
-app.get('/block/:id', (req, res) => {
-  let blockHeight = Number(req.params.id)
-  blockchain.getBlock(blockHeight).then(function(block){
-  console.log(block)
-  res.send(block)
-  })
-  // Add error handler
+app.post('/message-signature/validate', (req,res) => {
+  let address = req.body["address"]
+  let signature = req.body["signature"]
+  let timestamp = new Date().getTime().toString().slice(0,-3)
+  let registerStar = true
+
+
+  console.log("POST on port 8000")
+  
+  res.send(JSON.stringify(
+    {
+      "registerStar": registerStar,
+      "status": {
+        "address": address,
+        "requestTimeStamp": timestamp,
+        "message": address + ":" + timestamp + ":starRegistry",
+        "validationWindow": 193,
+        "messageSignature": "valid"
+      }
+    }))
+
 })
 
-app.post('/block', (req,res) => {
-  console.log("POST on port 8000")
-  blockchain.addBlock(new Block(req.body["body"])).then(console.log('Added new block'))
+app.post('/requestValidation', (req,res) => {
 
+  res.send(JSON.stringify(
+  {
+    "address": "142BDCeSGbXjWKaAnYXbMpZ6sbrSAo3DpZ",
+    "requestTimeStamp": "1532296090",
+    "message": "142BDCeSGbXjWKaAnYXbMpZ6sbrSAo3DpZ:1532296090:starRegistry",
+    "validationWindow": 300
+  }))
+})
+
+
+app.post('/block', (req,res) => {
+  let starBody = req.body
+  starBody["star"]["story"] = Buffer.from(starBody["star"]["story"], 'ascii').toString('hex')
+
+  blockchain.addBlock(new Blockchain.Block(starBody))
+  .then(()=>blockchain.getBlockHeight())
+  .then((value)=>blockchain.getBlock(value))
+  .then((value) => res.send(value))
 })
 
 app.listen(PORT, () => console.log(`Example app listening on port ${PORT}`))

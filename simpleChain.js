@@ -24,11 +24,11 @@ function addLevelDBData(key,value){
 |  ===============================================*/
 
 class Block{
-	constructor(data){
+	constructor(data, timestamp=0){
      this.hash = "",
      this.height = 0,
      this.body = data,
-     this.time = 0,
+     this.time = timestamp,
      this.previousBlockHash = ""
     }
 };
@@ -74,7 +74,10 @@ class Blockchain{
     if (h === 0){
       console.log("Adds genesis")
       // Update the block
-      newBlock.time = new Date().getTime().toString().slice(0,-3);
+      if (newBlock.time == 0){
+        newBlock.time = new Date().getTime().toString().slice(0,-3);
+      }
+
       newBlock.hash = SHA256(JSON.stringify(newBlock)).toString();
       await db.put(0, newBlock)
       this._dbexists  = true
@@ -151,4 +154,8 @@ class Blockchain{
 }
 
 
-module.exports = Blockchain;
+module.exports = {
+  Blockchain : Blockchain,
+  Block : Block
+}
+
