@@ -39,10 +39,10 @@ app.post('/requestValidation', (req,res) => {
 
   res.send(JSON.stringify(
   {
-    "address": "142BDCeSGbXjWKaAnYXbMpZ6sbrSAo3DpZ",
-    "requestTimeStamp": "1532296090",
-    "message": "142BDCeSGbXjWKaAnYXbMpZ6sbrSAo3DpZ:1532296090:starRegistry",
-    "validationWindow": 300
+    address: "142BDCeSGbXjWKaAnYXbMpZ6sbrSAo3DpZ",
+    requestTimeStamp: "1532296090",
+    message: "142BDCeSGbXjWKaAnYXbMpZ6sbrSAo3DpZ:1532296090:starRegistry",
+    validationWindow: 300
   }))
 })
 
@@ -55,6 +55,52 @@ app.post('/block', (req,res) => {
   .then(()=>blockchain.getBlockHeight())
   .then((value)=>blockchain.getBlock(value))
   .then((value) => res.send(value))
+})
+
+app.get('/stars/address::addressId', async (req,res) => {
+  let addressId = req.params.addressId
+  let result = []
+  let h = await blockchain.getBlockHeight()
+  let found = false
+  for (var i = 1; i< h; i++){
+    let block = await blockchain.getBlock(i)
+
+    if (block.body.address === addressId){
+      found = true
+      result.push(block)
+    }
+  }
+  if (!found){
+    res.send("No results found")
+  }
+  else{
+    res.send(result)
+  }
+})
+
+app.get('/stars/hash::hashId', async (req,res) => {
+  let hashId = req.params.hashId
+  let found = false
+  let h = await blockchain.getBlockHeight()
+
+  for (var i = 1; i< h; i++){
+    let block = await blockchain.getBlock(i)
+
+    if (block.hash === hashId){
+      found = True
+      res.send(block)
+      break
+    }
+  }
+  if (!found){
+    res.send("No results found")
+  }
+})
+
+
+app.get('/block/:height', async (req,res) => {
+
+  res.send(await blockchain.getBlock(req.params.height))
 })
 
 app.listen(PORT, () => console.log(`Example app listening on port ${PORT}`))
