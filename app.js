@@ -1,51 +1,80 @@
-/* ===== REst Functions =======================
-|  Functions to operate on a LevelDB  			   |
-|  ===============================================*/
-
+// Import pachages
 const express = require('express')
 const app = express()
+const bitcoin = require('bitcoinjs-lib');
+const bitcoinMessage = require('bitcoinjs-message');
+
+
+
 var Blockchain = require('./simpleChain.js')
 app.use(express.json())
 const PORT  = 8000;
 
+
 let blockchain = new Blockchain.Blockchain();
 
-app.get('/', (req, res) => res.send('Welcome Notary Blockhain service!'))
+// Dictionnary that holds the information after user validation request
+let messagesToSign = {} 
 
+
+// Root path 
+app.get('/', (req, res) => res.send('Welcome to the Notary Blockhain service!'))
+
+
+// Path for Validation request
+// User is submitting their wallet address and receive a message to sign
+app.post('/requestValidation', (req,res) => {
+  let address = req.body["address"]
+  let timeStamp =  new Date().getTime().toString().slice(0,-3)
+
+  let message = address + ":" + timeStamp + ":starRegistry"
+  let userMessageToSign = JSON.stringify(
+                      {
+                        "address": address,
+                        "requestTimeStamp": timeStamp,
+                        "message": message,
+                        "validationWindow": 300
+                      })
+  messagesToSign[address] = userMessageToSign
+  res.send(userMessageToSign)
+})
+
+
+// Path for signature validation
+// Message is checked fr validity using the bitcoin library
+// If it is within time and valid user can procceed to registration
 app.post('/message-signature/validate', (req,res) => {
   let address = req.body["address"]
   let signature = req.body["signature"]
-  let timestamp = new Date().getTime().toString().slice(0,-3)
-  let registerStar = true
+  let registerStar = false
 
+  // get the message of the user from the dictionary
+  let userMessage = JSON.parse(messagesToSign[address])
 
-  console.log("POST on port 8000")
+  // validate the message with the signature
+  let messageSignature = "invalid"
+  if (bitcoinMessage.verify(userMessage.message, address, signature)){
+     messageSignature = "valid"
+  }
+
+  // check that request is within validation window
+  let currentTime = new Date().getTime().toString().slice(0,-3)
+  let elapsedTime = currentTime - Number(userMessage.requestTimeStamp)
+
   
+
   res.send(JSON.stringify(
     {
       "registerStar": registerStar,
       "status": {
         "address": address,
-        "requestTimeStamp": timestamp,
-        "message": address + ":" + timestamp + ":starRegistry",
-        "validationWindow": 193,
-        "messageSignature": "valid"
+        "requestTimeStamp": userMessage.requestTimeStamp,
+        "message": userMessage.message,
+        "validationWindow": userMessage.validationWindow - elapsedTime,
+        "messageSignature": messageSignature
       }
     }))
-
 })
-
-app.post('/requestValidation', (req,res) => {
-
-  res.send(JSON.stringify(
-  {
-    address: "142BDCeSGbXjWKaAnYXbMpZ6sbrSAo3DpZ",
-    requestTimeStamp: "1532296090",
-    message: "142BDCeSGbXjWKaAnYXbMpZ6sbrSAo3DpZ:1532296090:starRegistry",
-    validationWindow: 300
-  }))
-})
-
 
 app.post('/block', (req,res) => {
   let starBody = req.body
@@ -57,6 +86,7 @@ app.post('/block', (req,res) => {
   .then((value) => res.send(value))
 })
 
+// Star lookup by address
 app.get('/stars/address::addressId', async (req,res) => {
   let addressId = req.params.addressId
   let result = []
@@ -65,8 +95,9 @@ app.get('/stars/address::addressId', async (req,res) => {
   for (var i = 1; i< h; i++){
     let block = await blockchain.getBlock(i)
 
-    if (block.body.address === addressId){
+    if (block.body["address"] === addressId){
       found = true
+
       result.push(block)
     }
   }
