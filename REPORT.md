@@ -104,5 +104,5 @@ The response can return more than one elements as it is possible the user in the
 ### Get star block by star block height with JSON response.
 The response, if it exists one, is a single element
 ```curl
-POST "http://localhost:8000/stars/block/[blockId]"
+POST "http://localhost:8000/stars/block/height"
 ```
