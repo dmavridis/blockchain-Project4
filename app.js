@@ -8,10 +8,12 @@ var Blockchain = require('./simpleChain.js')
 app.use(express.json())
 const PORT  = 8000;
 const VALIDATION_WINDOW = 300;
+const STORYLIMIT = 250;
 let blockchain = new Blockchain.Blockchain();
 
 // Dictionnary that holds the information after user validation request
-let messagesToSign = {} 
+let messagesToSign = {}
+let registerStarUser = {}
 
 // Root path 
 app.get('/', (req, res) => res.send('Welcome to the Notary Blockhain service!'))
@@ -19,14 +21,13 @@ app.get('/', (req, res) => res.send('Welcome to the Notary Blockhain service!'))
 // Path for Validation request
 // User is submitting their wallet address and receive a message to sign
 app.post('/requestValidation', (req,res) => {
-  let address = req.body["address"]
+  let address = req.body.address
   let validationWindow
   let timeStamp
 
-
   // If this is not the first request validation window needs update
   if (messagesToSign[address] !== undefined){
-    timeStamp = JSON.parse(messagesToSign[address]).requestTimeStamp
+    timeStamp = messagesToSign[address].requestTimeStamp
     currentTime = new Date().getTime().toString().slice(0,-3)
     validationWindow = VALIDATION_WINDOW - (currentTime - timeStamp)
   }
@@ -42,69 +43,100 @@ app.post('/requestValidation', (req,res) => {
     delete messagesToSign[address]
   }
   else {
-    let userMessageToSign = JSON.stringify(
-                        {
-                          "address": address,
-                          "requestTimeStamp": timeStamp,
-                          "message": message,
-                          "validationWindow": validationWindow
-                        })
+    let userMessageToSign = {
+                              "address": address,
+                              "requestTimeStamp": timeStamp,
+                              "message": message,
+                              "validationWindow": validationWindow
+                            }
     messagesToSign[address] = userMessageToSign
     res.send(userMessageToSign)
+    
   }
 })
 
 // Path for signature validation
-// Message is checked fr validity using the bitcoin library
+// Message is checked for validity using the bitcoin library
 // If it is within time and valid user can procceed to registration
 app.post('/message-signature/validate', (req,res) => {
   let address = req.body["address"]
   let signature = req.body["signature"]
-  let registerStar = true
+  let registerStar = false
+  let messageSignature = "invalid"
+
 
   // get the message of the user from the dictionary
-  let userMessage = JSON.parse(messagesToSign[address])
+  let userMessage = messagesToSign[address]
 
-  // validate the message with the signature
-  let messageSignature = "invalid"
-  if (bitcoinMessage.verify(userMessage.message, address, signature)){
-     messageSignature = "valid"
+  if (userMessage === undefined){
+    res.send("Invalid request, please request validation first!")
   }
+  else {
+    if (bitcoinMessage.verify(userMessage.message, address, signature)){
+      messageSignature = "valid"
+      registerStar = true
+    }
+    // check that request is within validation window
+    let timeStamp = userMessage.requestTimeStamp
+    let currentTime = new Date().getTime().toString().slice(0,-3)
+    validationWindow = VALIDATION_WINDOW - (currentTime - timeStamp)
 
-  // check that request is within validation window
-  let timeStamp = userMessage.requestTimeStamp
-  let currentTime = new Date().getTime().toString().slice(0,-3)
-  validationWindow = VALIDATION_WINDOW - (currentTime - timeStamp)
-
-  if (validationWindow < 0){
-    res.send("Session expired, please try again!")
-  }
-  else{
-    res.send(JSON.stringify(
-      {
-        "registerStar": registerStar,
-        "status": {
-          "address": address,
-          "requestTimeStamp": userMessage.requestTimeStamp,
-          "message": userMessage.message,
-          "validationWindow": validationWindow,
-          "messageSignature": messageSignature
-        }
-      }))
+    if (validationWindow < 0){
+      delete messagesToSign[address]
+      res.send("Session expired, please try again!")
+    }
+    else{
+      let starUser = {
+                      "registerStar": registerStar,
+                      "status": 
+                      {
+                        "address": address,
+                        "requestTimeStamp": userMessage.requestTimeStamp,
+                        "message": userMessage.message,
+                        "validationWindow": validationWindow,
+                        "messageSignature": messageSignature
+                      }
+                    }
+      registerStarUser[address] = starUser
+      res.send(starUser)
+      if (registerStar){
+        delete messagesToSign[address] // not necessary anymore
+      }
+      }
     }
 })
 
 // Path to add star to the blockchain
 app.post('/block', async (req,res) => {
   let starBody = req.body
+  // Check if register star is valid and still within time window
 
-  // Encode the body
-  starBody["star"]["story"] = Buffer.from(starBody["star"]["story"], 'ascii').toString('hex')
-
-  blockchain.addBlock(new Blockchain.Block(starBody))
-  .then(()=>blockchain.getBlockHeight())
-  .then((value)=>blockchain.getBlock(value))
-  .then((value) => res.send(value))
+  if (registerStarUser[starBody.address] === undefined){
+    res.send("No session or session expired, please try again!")
+  }  
+  else if (registerStarUser[starBody.address].registerStar === false){
+    res.send("Request rejected, invalid signature or star already submitted")
+    delete registerStarUser[starBody.address]
+  }
+  else {
+    // check for length of story and existence of dec and ra coordinates
+    if (starBody.star.dec === undefined || starBody.star.ra === undefined){
+      res.send("Missing Star data!")
+    }
+    else if (starBody["star"]["story"].length > STORYLIMIT){
+      res.send("Maximum story length exceeded!")
+    }
+    else{ // adding the data
+      // Encode the body
+      starBody.star.story = Buffer.from(starBody.star.story, 'ascii').toString('hex')
+      registerStarUser[starBody.address].registerStar = false // invalidate duplicate attempts
+      // Add entry to the blockchain
+      blockchain.addBlock(new Blockchain.Block(starBody))
+      .then(()=>blockchain.getBlockHeight())
+      .then((value)=>blockchain.getBlock(value))
+      .then((value) => res.send(value))
+     }
+  }
 })
 
 // Path to lookup star by address
@@ -141,7 +173,7 @@ app.get('/stars/hash::hashId', async (req,res) => {
     let block = await blockchain.getBlock(i)
 
     if (block.hash === hashId){
-      found = True
+      found = true
       block.body.star["storyDecoded"] = new Buffer(block.body.star.story, 'hex').toString('ascii');
       res.send(block)
       break
@@ -154,9 +186,19 @@ app.get('/stars/hash::hashId', async (req,res) => {
 
 // Path to lookup star by blockchain height
 app.get('/block/:height', async (req,res) => {
-  let block = await blockchain.getBlock(req.params.height)
-  block.body.star["storyDecoded"] = new Buffer(block.body.star.story, 'hex').toString('ascii');
-  res.send(block)
+  let h = req.params.height
+  let hmax = await blockchain.getBlockHeight()
+
+  h = Math.min(h,hmax-1)
+  let block = await blockchain.getBlock(h)
+  if (h === 0){
+    res.send(block)
+  }
+  else {
+    block.body.star["storyDecoded"] = new Buffer(block.body.star.story, 'hex').toString('ascii');
+    res.send(block)
+  }
+
 })
 
 app.listen(PORT, () => console.log(`Example app listening on port ${PORT}`))
