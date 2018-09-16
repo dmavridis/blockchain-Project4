@@ -87,7 +87,7 @@ class Blockchain{
         // add the block at the end
         newBlock.time = new Date().getTime().toString().slice(0,-3);
         newBlock.height = h
-        await db.get(h-1)
+        return db.get(h-1)
           .then((value) => newBlock.previousBlockHash = value.hash)
           .then(function(){
             newBlock.hash = SHA256(JSON.stringify(newBlock)).toString()

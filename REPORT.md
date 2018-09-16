@@ -63,8 +63,7 @@ Content-Type: application/json
   }
 }
 ```
-
-The node submits the entry to the blockchain. The story field is encoded. Therefore the response would look like:
+Checks are made for missing data or story entry exceeding a maximum length. The node submits the entry to the blockchain. The story field is encoded. Therefore the response would look like:
 
 
 ```json
@@ -102,7 +101,7 @@ The response can return more than one elements as it is possible the user in the
 
 
 ### Get star block by star block height with JSON response.
-The response, if it exists one, is a single element
+The response, is a single element. If requested block number is larger than the blockchain height, the last element is returned. Check has also been added to handle the genesis block.
 ```curl
 POST "http://localhost:8000/stars/block/height"
 ```
